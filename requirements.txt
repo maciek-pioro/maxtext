@@ -9,7 +9,7 @@ cloud-tpu-diagnostics
 datasets
 gcsfs
 google-cloud-storage
-grain-nightly
+grain-nightly; sys_platform != 'darwin'
 flax>=0.8.0
 ml-collections
 ml-goodput-measurement
@@ -22,8 +22,10 @@ pyink
 pre-commit
 pytype
 sentencepiece==0.1.97
-tensorflow-text>=2.13.0
-tensorflow>=2.13.0
+tensorflow-text>=2.13.0; sys_platform != 'darwin'
+tensorflow>=2.13.0; sys_platform != 'darwin'
+tensorflow-text; sys_platform == 'darwin'
+tensorflow; sys_platform == 'darwin'
 tensorflow-datasets
 tensorboardx
 tensorboard-plugin-profile
@@ -32,3 +34,4 @@ transformers
 mlperf-logging@git+https://github.com/mlperf/logging.git
 google-jetstream
 jsonlines
+neptune[tensorboard]
