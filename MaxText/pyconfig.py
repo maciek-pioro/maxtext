@@ -213,8 +213,8 @@ class _HyperParameters:
           type(raw_data_from_yaml[k]) not in _yaml_types_to_parser
       ):
         raise ValueError(
-            f"For key '{k}', type {type(raw_data_from_yaml[k])} not in {_yaml_types_to_parser.keys()}, can't pass"
-            " at the CLI or ENV"
+            f"For key '{k}', type {type(new_proposal)} not in {_yaml_types_to_parser.keys()}, can't pass"
+            f" at the CLI or ENV. Original value: {raw_data_from_yaml[k]}"
         )
 
       if isinstance(new_proposal, type(raw_data_from_yaml[k])):
