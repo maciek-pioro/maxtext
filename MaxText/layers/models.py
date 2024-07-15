@@ -171,6 +171,7 @@ class Decoder(nn.Module):
 
   config: Config
   shared_embedding: nn.Module
+  token_to_bytes_lookup: Optional[jnp.ndarray]
   mesh: Mesh
   quant: Optional[Quant] = None
 
@@ -254,6 +255,17 @@ class Decoder(nn.Module):
 
     # [batch, length] -> [batch, length, emb_dim]
     y = self.shared_embedding(decoder_input_tokens.astype("int32"))
+    if cfg.use_byte_embeddings:
+      assert self.token_to_bytes_lookup is not None
+      y += embeddings.ByteEmbed(
+        num_embeddings=cfg.vocab_size,
+        features=cfg.emb_dim,
+        dtype=cfg.dtype,
+        embedding_init=nn.initializers.normal(stddev=1.0),
+        name="byte_embedder",
+        tokens_to_bytes_lookup_array=self.token_to_bytes_lookup,
+        config=cfg,
+      )(decoder_input_tokens.astype("int32"))
     y = nn.Dropout(rate=cfg.dropout_rate, broadcast_dims=(-2,))(y, deterministic=deterministic)
     y = y.astype(cfg.dtype)
 
@@ -414,7 +426,12 @@ class Transformer(nn.Module):
         config=cfg,
     )
 
-    self.decoder = Decoder(config=cfg, shared_embedding=self.shared_embedding, mesh=mesh, quant=self.quant)
+    if cfg.use_byte_embeddings:
+      token_to_bytes_lookup = jnp.load(cfg.bytes_lookup_file)
+    else:
+      token_to_bytes_lookup = None
+
+    self.decoder = Decoder(config=cfg, shared_embedding=self.shared_embedding, mesh=mesh, quant=self.quant, token_to_bytes_lookup=token_to_bytes_lookup)
 
   def __call__(
       self,

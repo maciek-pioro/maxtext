@@ -31,6 +31,105 @@ default_embed_init = initializers.default_embed_init
 with_logical_partitioning = nn.with_logical_partitioning
 
 _MAX_WAVELENGTH = 10_000
+MAX_BYTES_PER_TOKEN = 16
+N_BYTES = 256
+class ByteEmbed(nn.Module):
+  """A parameterized function from integers [0, n) to d-dimensional vectors.
+
+  Attributes:
+    num_embeddings: number of embeddings.
+    features: number of feature dimensions for each embedding.
+    dtype: the dtype of the embedding vectors (default: float32).
+    embedding_init: embedding initializer.
+  """
+
+  # pylint: disable=attribute-defined-outside-init
+  config: Config
+  num_embeddings: int
+  features: int
+  tokens_to_bytes_lookup_array: Array
+  lowrank_dim: Optional[int] = None
+  cast_input_dtype: Optional[DType] = None
+  dtype: DType = jnp.float32
+  attend_dtype: Optional[DType] = None
+  embedding_init: Initializer = default_embed_init
+
+  def setup(self):
+    # self.token_to_bytes_lookup = self.param(
+    #     "token_to_bytes_lookup",
+    #     with_logical_partitioning(self.embedding_init, ("byte_vocab", "embed")),
+    #     (self.num_embeddings, MAX_BYTES_PER_TOKEN),
+    #     int,
+    # )
+    # ll = self.tokens_to_bytes_lookup_array
+    # ll = jax.random.randint(jax.random.PRNGKey(0), minval=-1, maxval=256, shape=(self.num_embeddings, MAX_BYTES_PER_TOKEN))
+    # self.token_to_bytes_lookup = self.variable('token_to_bytes_lookup', 'token_to_bytes_lookup',
+    #                         lambda: ll)
+    # self.token_to_bytes_lookup = ll
+
+    if self.lowrank_dim is not None:
+      features = self.lowrank_dim
+    else:
+      features = self.features
+
+    self.bytes_to_embeddings_lookup = self.param(
+        "byte_embeddings",
+        with_logical_partitioning(self.embedding_init, ("vocab", "embed")),
+        (MAX_BYTES_PER_TOKEN, features),
+        self.config.weight_dtype,
+    )
+    self.bytes_positionals = self.param(
+        "byte_positional_embeddings",
+        with_logical_partitioning(self.embedding_init, ("vocab", "embed")),
+        (MAX_BYTES_PER_TOKEN, features, features),
+        self.config.weight_dtype,
+    )
+
+    # if self.lowrank_dim is not None:
+    #   self.upscale = self.param(
+    #       "upscale",
+    #       with_logical_partitioning(self.embedding_init, ("vocab", "embed")),
+    #       (self.lowrank_dim, self.features),
+    #       self.config.weight_dtype,
+    #   )
+
+  def __call__(self, inputs) -> Array:
+    """Embeds the inputs along the last dimension.
+
+    Args:
+      inputs: input data, all dimensions are considered batch dimensions.
+
+    Returns:
+      Output which is embedded input data.  The output shape follows the input,
+      with an additional `features` dimension appended.
+    """
+    # cfg = self.config
+    # if self.cast_input_dtype:
+    #   inputs = inputs.astype(self.cast_input_dtype)
+    # if not jnp.issubdtype(inputs.dtype, jnp.integer):
+    #   raise ValueError("Input type must be an integer or unsigned integer.")
+
+    # if cfg.use_iota_embed:
+    #   iota = lax.iota(jnp.int32, self.num_embeddings)
+    #   one_hot = jnp.array(inputs[..., jnp.newaxis] == iota, dtype=self.dtype)
+    #   output = jnp.dot(one_hot, jnp.asarray(self.embedding, self.dtype))
+    # else:
+    #   output = jnp.asarray(self.embedding, self.dtype)[inputs]
+    # output = nn.with_logical_constraint(output, ("activation_embed_and_logits_batch", "activation_length", "activation_embed"))
+
+    # bytes_ids = self.token_to_bytes_lookup.value[inputs]
+    bytes_ids = self.tokens_to_bytes_lookup_array[inputs]
+    is_missing_byte = bytes_ids == -1
+    bytes_embeddings = jnp.asarray(self.bytes_to_embeddings_lookup, self.dtype)[bytes_ids]
+    bytes_embeddings = nn.with_logical_constraint(bytes_embeddings, logical_axis_resources=("activation_batch", "activation_length", "activation_embed"))
+
+    positioned_embeddings = jnp.einsum("pij,...pi->...pj", self.bytes_positionals, bytes_embeddings)
+
+    positioned_embeddings = nn.with_logical_constraint(positioned_embeddings, ("activation_batch", "activation_length", "activation_embed"))
+    positioned_embeddings = positioned_embeddings * jnp.expand_dims(~is_missing_byte, -1)
+    output = jnp.sum(positioned_embeddings, axis=-2)
+
+    return output
 
 
 class Embed(nn.Module):

@@ -507,6 +507,12 @@ class HyperParameters:  # pylint: disable=missing-class-docstring
   def __setattr__(self, attr, value):
     raise ValueError
 
+  def get(self, attr):
+    try:
+      return self.__getattr__(attr)
+    except ValueError:
+      return None
+
   def get_keys(self):
     return _config.keys
 

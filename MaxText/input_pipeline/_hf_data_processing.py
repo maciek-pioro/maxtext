@@ -142,7 +142,7 @@ def make_hf_iterator(
 
   if config.eval_interval > 0:
     eval_ds = datasets.load_dataset(
-      config.hf_path,
+      config.get("hf_eval_path") or config.hf_path,
       data_dir=config.hf_data_dir,
       data_files=config.hf_eval_files,
       split=config.hf_eval_split,
